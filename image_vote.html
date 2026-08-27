@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>画像投票システム</title>
+<style>
+  :root {
+    --bg: #14171c;
+    --panel: #1c2028;
+    --panel-border: #2b303a;
+    --text: #eef0f3;
+    --text-dim: #9aa1ad;
+    --accent: #d8b26a;
+    --accent-dim: #6b5a34;
+    --ok: #6ec6a4;
+    --err: #d97757;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Noto Sans JP", "Meiryo", sans-serif;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 40px 16px 80px;
+  }
+  .wrap { width: 100%; max-width: 920px; }
+  header { text-align: center; margin-bottom: 32px; }
+  h1 { font-size: 28px; letter-spacing: 0.04em; margin: 0 0 8px; font-weight: 700; }
+  header p { color: var(--text-dim); margin: 0; font-size: 14px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+  }
+  .card {
+    position: relative;
+    background: var(--panel);
+    border: 2px solid var(--panel-border);
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .card:hover { transform: translateY(-2px); border-color: var(--accent-dim); }
+  .card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .card img { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; display: block; background: #000; }
+  .card .num {
+    position: absolute; top: 8px; left: 8px;
+    background: rgba(0,0,0,0.55); color: var(--text);
+    font-size: 12px; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.05em;
+  }
+  .card .check {
+    position: absolute; top: 8px; right: 8px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent); color: #1c1c1c; font-size: 14px;
+    display: none; align-items: center; justify-content: center; font-weight: 700;
+  }
+  .card.selected .check { display: flex; }
+  .card.disabled { cursor: default; opacity: 0.9; }
+
+  .actions { text-align: center; margin-bottom: 28px; }
+  button {
+    font: inherit; border: none; border-radius: 8px;
+    padding: 12px 32px; font-size: 15px; font-weight: 700; letter-spacing: 0.03em;
+    cursor: pointer; transition: opacity 0.15s ease, background 0.15s ease;
+  }
+  .btn-primary { background: var(--accent); color: #1c1c1c; }
+  .btn-primary:disabled { background: var(--panel-border); color: var(--text-dim); cursor: not-allowed; }
+
+  .msg { font-size: 13px; color: var(--text-dim); margin-top: 10px; min-height: 18px; }
+  .msg.ok { color: var(--ok); }
+  .msg.err { color: var(--err); }
+
+  .results { display: none; }
+  .results.show { display: block; }
+  .results h2 { font-size: 16px; color: var(--text-dim); font-weight: 500; text-align: center; margin: 0 0 20px; }
+  .bar-row {
+    display: grid; grid-template-columns: 56px 1fr 80px;
+    align-items: center; gap: 12px; margin-bottom: 10px;
+  }
+  .bar-row .thumb { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; border: 2px solid var(--panel-border); }
+  .bar-track { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 6px; height: 22px; overflow: hidden; }
+  .bar-fill { height: 100%; background: linear-gradient(90deg, var(--accent-dim), var(--accent)); width: 0%; transition: width 0.5s ease; }
+  .bar-row .count { text-align: right; font-size: 13px; color: var(--text-dim); }
+  .total { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 16px; }
+  .refresh-note { text-align: center; font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>好きな画像に投票しよう</h1>
+    <p>7枚の中から、いちばん好きな画像を1枚選んでください</p>
+  </header>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="actions">
+    <button class="btn-primary" id="voteBtn" disabled>投票する</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="results" id="results">
+    <h2>投票結果（全員の集計）</h2>
+    <div id="bars"></div>
+    <div class="total" id="total"></div>
+    <div class="refresh-note">結果は自動更新されます</div>
+  </div>
+</div>
+
+<script>
+/* ===================================================================
+ * 1) 画像URL（7枚）をここに設定してください
+ * 2) API_URL は、Apps Scriptを「ウェブアプリ」としてデプロイしたときに
+ *    発行されるURL（.../exec で終わるもの）に置き換えてください
+ * =================================================================== */
+const IMAGES = [
+  "https://picsum.photos/seed/vote1/500/500",
+  "https://picsum.photos/seed/vote2/500/500",
+  "https://picsum.photos/seed/vote3/500/500",
+  "https://picsum.photos/seed/vote4/500/500",
+  "https://picsum.photos/seed/vote5/500/500",
+  "https://picsum.photos/seed/vote6/500/500",
+  "https://picsum.photos/seed/vote7/500/500"
+];
+
+const API_URL = "ここにApps ScriptのウェブアプリURLを貼り付け"; // 例: https://script.google.com/macros/s/XXXXXXXX/exec
+
+const VOTER_ID_KEY = "image_vote_voter_id";
+const REFRESH_INTERVAL_MS = 5000;
+
+let selectedIndex = null;
+let hasVotedLocally = false;
+
+const grid = document.getElementById("grid");
+const voteBtn = document.getElementById("voteBtn");
+const msg = document.getElementById("msg");
+const resultsEl = document.getElementById("results");
+const barsEl = document.getElementById("bars");
+const totalEl = document.getElementById("total");
+
+function getVoterId() {
+  let id = localStorage.getItem(VOTER_ID_KEY);
+  if (!id) {
+    id = "v_" + Date.now() + "_" + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem(VOTER_ID_KEY, id);
+  }
+  return id;
+}
+
+function setMsg(text, type) {
+  msg.textContent = text;
+  msg.classList.remove("ok", "err");
+  if (type) msg.classList.add(type);
+}
+
+function renderGrid() {
+  grid.innerHTML = "";
+  IMAGES.forEach((src, i) => {
+    const card = document.createElement("div");
+    card.className = "card";
+    card.dataset.index = i;
+    card.innerHTML = `
+      <span class="num">No.${i + 1}</span>
+      <span class="check">&#10003;</span>
+      <img src="${src}" alt="画像 ${i + 1}">
+    `;
+    card.addEventListener("click", () => selectCard(i));
+    grid.appendChild(card);
+  });
+}
+
+function selectCard(i) {
+  if (hasVotedLocally) return;
+  selectedIndex = i;
+  document.querySelectorAll(".card").forEach(c => {
+    c.classList.toggle("selected", parseInt(c.dataset.index, 10) === i);
+  });
+  voteBtn.disabled = false;
+  setMsg("No." + (i + 1) + " を選択中");
+}
+
+function lockGridAsVoted(votedIndex) {
+  hasVotedLocally = true;
+  voteBtn.disabled = true;
+  document.querySelectorAll(".card").forEach(c => {
+    c.classList.add("disabled");
+    c.classList.toggle("selected", parseInt(c.dataset.index, 10) === votedIndex);
+  });
+}
+
+async function submitVote() {
+  if (selectedIndex === null || hasVotedLocally) return;
+  voteBtn.disabled = true;
+  setMsg("送信中…");
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      body: JSON.stringify({ voterId: getVoterId(), imageIndex: selectedIndex })
+    });
+    const data = await res.json();
+
+    if (data.status === "ok") {
+      lockGridAsVoted(data.votedFor);
+      setMsg("投票ありがとうございました！（No." + (data.votedFor + 1) + " に投票しました）", "ok");
+    } else if (data.status === "already_voted") {
+      lockGridAsVoted(data.votedFor);
+      setMsg("すでに No." + (data.votedFor + 1) + " に投票済みです", "ok");
+    } else {
+      setMsg("投票に失敗しました。時間をおいて再度お試しください。", "err");
+      voteBtn.disabled = false;
+    }
+  } catch (err) {
+    setMsg("通信エラーが発生しました。API_URLの設定を確認してください。", "err");
+    voteBtn.disabled = false;
+  }
+
+  fetchResults();
+}
+
+async function fetchResults() {
+  try {
+    const res = await fetch(API_URL, { method: "GET" });
+    const data = await res.json();
+    renderResults(data.counts, data.total);
+  } catch (err) {
+    // 集計の取得に失敗しても投票フォーム自体は使えるようにしておく
+  }
+}
+
+function renderResults(counts, total) {
+  barsEl.innerHTML = "";
+  counts.forEach((count, i) => {
+    const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    row.innerHTML =
+      '<img class="thumb" src="' + IMAGES[i] + '" alt="No.' + (i + 1) + '">' +
+      '<div class="bar-track"><div class="bar-fill" style="width:' + pct + '%"></div></div>' +
+      '<div class="count">' + count + '票 (' + pct + '%)</div>';
+    barsEl.appendChild(row);
+  });
+  totalEl.textContent = "合計 " + total + " 票";
+  resultsEl.classList.add("show");
+}
+
+function init() {
+  renderGrid();
+  fetchResults();
+  setInterval(fetchResults, REFRESH_INTERVAL_MS);
+}
+
+voteBtn.addEventListener("click", submitVote);
+init();
+</script>
+</body>
+</html>

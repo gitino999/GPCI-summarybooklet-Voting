@@ -90,6 +90,19 @@
   .bar-row .count { text-align: right; font-size: 13px; color: var(--text-dim); }
   .total { text-align: center; font-size: 12px; color: var(--text-dim); margin-top: 16px; }
   .refresh-note { text-align: center; font-size: 11px; color: var(--text-dim); margin-top: 8px; }
+  .past-colors { margin-bottom: 32px; text-align: center; }
+  .past-colors h2 {
+    font-size: 16px;
+    color: var(--text-dim);
+    font-weight: 500;
+    margin: 0 0 16px;
+  }
+  .past-colors-img {
+    max-width: 100%;
+    border-radius: 10px;
+    border: 2px solid var(--panel-border);
+  }
+</style>
 </style>
 </head>
 <body>
@@ -100,6 +113,11 @@
   </header>
 
   <div class="grid" id="grid"></div>
+
+  <div class="past-colors">
+    <h2>これまでの表紙色</h2>
+    <img src="past_colors.jpg" alt="これまでの表紙色" class="past-colors-img">
+  </div>
 
   <div class="actions">
     <button class="btn-primary" id="voteBtn" disabled>投票する</button>
